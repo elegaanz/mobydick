@@ -93,7 +93,9 @@ fn main() {
     let login_page = ui::login_page::render(state.clone());
 
     state.borrow().stack.add_named(&login_page, "login");
-    window.add(&state.borrow().stack);
+    let scrolled = ScrolledWindow::new(None, None);
+    scrolled.add(&state.borrow().stack);
+    window.add(&scrolled);
     window.show_all();
 
     if state.borrow().instance.is_some() && state.borrow().token.is_some() {

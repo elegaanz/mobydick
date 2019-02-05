@@ -57,6 +57,7 @@ pub struct ArtistAlbum {
 	pub title: String,
 	pub tracks_count: i32,
 	pub id: i32,
+	pub cover: Image,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]

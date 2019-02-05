@@ -9,6 +9,7 @@ cairo-rs = "0.5"
 dirs = "1.0"
 gdk = "0.9"
 gdk-pixbuf = "0.5"
+glib = "0.6"
 gtk = { version = "0.5", features = [ "v3_22" ] }
 serde = "1.0"
 serde_derive = "1.0"

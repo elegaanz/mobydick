@@ -1,6 +1,6 @@
 use gtk::*;
 use std::{fs, thread};
-use crate::{Download, State, api};
+use crate::{Download, State, api, ui::network_image::NetworkImage};
 
 pub struct Card<T: CardModel> {
 	model: T,
@@ -17,8 +17,12 @@ impl<T: 'static> Card<T> where T: CardModel {
 
 	pub fn render(&self) -> Grid {
 		let card = Grid::new();
+		card.set_column_spacing(12);
+		card.set_valign(Align::Start);
+
 		if let Some(url) = self.model.image_url() {
-			// TODO
+			let img = NetworkImage::new(format!("https://{}{}", self.state.borrow().instance.clone().unwrap(), url));
+			card.attach(&*img.img.borrow(), 0, 0, 1, 2);
 		}
 
 		let main_text = Label::new(self.model.text().as_ref());
@@ -30,11 +34,22 @@ impl<T: 'static> Card<T> where T: CardModel {
 		sub_text.set_hexpand(true);
 		sub_text.set_halign(Align::Start);
 
-		let dl_bt = Button::new_from_icon_name("go-down", 32);
-		dl_bt.set_label("Download");
+		let dl_bt = Button::new_with_label("Download");
+		dl_bt.set_valign(Align::Center);
+		dl_bt.set_vexpand(true);
+		dl_bt.get_style_context().map(|c| c.add_class("suggested-action"));
+
+		let dl_list = self.model.downloads(self.state.clone());
+		if dl_list.len() > 1 { // Not only one song
+			let more_bt = Button::new_with_label("Details");
+			more_bt.set_valign(Align::Center);
+			more_bt.set_vexpand(true);
+			card.attach(&more_bt, 2, 0, 1, 2);
+		}
+
 		let state = self.state.clone();
 		let model = self.model.clone();
-		dl_bt.connect_clicked(move |_| {
+		dl_bt.connect_clicked(clone!(state, model => move |_| {
 			let downloads = state.borrow().downloads.clone();
 			for dl in model.downloads(state.clone()) {
 				let token = state.borrow().token.clone().unwrap_or_default();
@@ -53,11 +68,11 @@ impl<T: 'static> Card<T> where T: CardModel {
 					println!("saved {:?}", dl.output);
 				});
 			}
-		});
+		}));
 
-		card.attach(&main_text, 0, 0, 1, 1);
-		card.attach(&sub_text, 0, 1, 1, 1);
-		card.attach(&dl_bt, 1, 0, 2, 1);
+		card.attach(&main_text, 1, 0, 1, 1);
+		card.attach(&sub_text, 1, 1, 1, 1);
+		card.attach(&dl_bt, 3, 0, 1, 2);
 
 		card
 	}
@@ -82,6 +97,12 @@ impl CardModel for api::Artist {
 
 	fn subtext(&self) -> String {
 		format!("{} albums", self.albums.clone().unwrap().len())
+	}
+
+	fn image_url(&self) -> Option<String> {
+		self.albums.clone()?.iter()
+			.next()
+			.and_then(|album| album.cover.medium_square_crop.clone())
 	}
 
 	fn downloads(&self, state: State) -> Vec<Download> {
@@ -120,6 +141,10 @@ impl CardModel for api::Album {
 		format!("{} tracks, by {}", self.tracks.clone().map(|t| t.len()).unwrap_or_default(), self.artist.name)
 	}
 
+	fn image_url(&self) -> Option<String> {
+		self.cover.medium_square_crop.clone()
+	}
+
 	fn downloads(&self, state: State) -> Vec<Download> {
 		self.tracks.clone().unwrap_or_default().iter().filter_map(|track|
 			api::Upload::get_for_track(track.id, state.borrow().instance.clone().unwrap(), state.borrow().token.clone().unwrap()).map(|u| Download {
@@ -138,6 +163,10 @@ impl CardModel for api::Track {
 
 	fn subtext(&self) -> String {
 		format!("By {}, in {}", self.artist.name, self.album.title)
+	}
+
+	fn image_url(&self) -> Option<String> {
+		self.album.cover.medium_square_crop.clone()
 	}
 
 	fn downloads(&self, state: State) -> Vec<Download> {

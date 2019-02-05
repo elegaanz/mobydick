@@ -82,6 +82,7 @@ pub fn render(state: State) -> gtk::Box {
 	cont.add(&search);
 
 	let results = gtk::Box::new(Orientation::Vertical, 12);
+	results.set_valign(Align::Start);
 	cont.add(&results);
 
 	let widgets = Rc::new(RefCell::new(
