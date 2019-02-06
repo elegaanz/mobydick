@@ -1,4 +1,88 @@
 use serde_derive::*;
+use lazy_static::*;
+use workerpool::Worker;
+use std::{
+	cell::RefCell,
+	sync::{
+		Arc,
+		mpsc::{channel, Receiver},
+		Mutex, MutexGuard
+	},
+};
+
+lazy_static! {
+	pub static ref API: Arc<Mutex<Option<RequestContext>>>
+		= Arc::new(Mutex::new(None));
+
+	static ref JOBS: workerpool::Pool<Req>
+		= workerpool::Pool::new(5);
+}
+
+pub fn execute(req: reqwest::RequestBuilder) -> Receiver<reqwest::Response> {
+	let (tx, rx) = channel();
+	JOBS.execute_to(tx, req);
+	rx
+}
+
+pub struct RequestContext {
+	token: String,
+	instance: String,
+	client: reqwest::Client,
+}
+
+impl RequestContext {
+	pub fn new(instance: String) -> Self {
+		RequestContext {
+			token: String::new(),
+			instance: instance.clone(),
+			client: reqwest::Client::new()
+		}
+	}
+
+	pub fn auth(&mut self, token: String) {
+		self.token = token.clone();
+	}
+
+	pub fn get<S: AsRef<str>>(&self, url: S) -> reqwest::RequestBuilder {
+		self.client
+			.get(&format!("https://{}{}", self.instance, url.as_ref()))
+			.header(reqwest::header::AUTHORIZATION, format!("JWT {}", self.token))
+	}
+
+	/// Warning: no authentication, since it is only used for login
+	pub fn post<S: AsRef<str>>(&self, url: S) -> reqwest::RequestBuilder {
+		self.client
+			.post(&format!("https://{}{}", self.instance, url.as_ref()))
+	}
+}
+
+#[derive(Default)]
+pub struct Req;
+
+impl Worker for Req {
+	type Input = reqwest::RequestBuilder;
+	type Output = reqwest::Response;
+
+	fn execute(&mut self, req: Self::Input) -> Self::Output {
+		req.send().expect("Error while sending request")
+	}
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub enum ApiResult<T> {
+	Ok(T),
+	Err
+}
+
+impl<T> Into<Result<T, ()>> for ApiResult<T> {
+	fn into(self) -> Result<T, ()> {
+		match self {
+			ApiResult::Ok(t) => Ok(t),
+			ApiResult::Err => Err(()),
+		}
+	}
+}
 
 #[derive(Deserialize, Serialize)]
 pub struct LoginData {

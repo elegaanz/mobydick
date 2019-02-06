@@ -25,6 +25,21 @@ macro_rules! clone {
     );
 }
 
+macro_rules! wait {
+	($exp:expr => | $res:ident | $then:block) => {
+		let rx = $exp;
+		gtk::idle_add(move || {
+			match rx.try_recv() {
+				Err(_) => glib::Continue(true),
+				Ok(mut $res) => {
+					$then;
+					glib::Continue(false)
+				},
+			}
+		})
+	}
+}
+
 mod api;
 mod ui;
 

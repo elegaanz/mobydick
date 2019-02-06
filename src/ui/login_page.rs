@@ -2,9 +2,9 @@ use gtk::*;
 use std::{
 	rc::Rc,
 	cell::RefCell,
+	ops::Deref
 };
-use crate::{State, api, ui::title};
-
+use crate::{State, api::*, ui::title};
 
 pub fn render(state: State) -> gtk::Box {
 	let cont = gtk::Box::new(Orientation::Vertical, 24);
@@ -27,27 +27,26 @@ pub fn render(state: State) -> gtk::Box {
 		instance, username, password
 	)));
 	login_bt.connect_clicked(clone!(state, widgets => move |_| {
-		state.borrow_mut().instance = widgets.borrow().0.get_text();
-		state.borrow_mut().username = widgets.borrow().1.get_text();
-		state.borrow_mut().password = widgets.borrow().2.get_text();
+		let mut api_ctx = crate::api::API.lock().expect("1");
+		*api_ctx = Some(RequestContext::new(
+			widgets.borrow().0.get_text().unwrap()
+		));
 
-		let res: api::LoginInfo = reqwest::Client::new()
-			.post(&format!("https://{}/api/v1/token/", state.borrow().instance.clone().unwrap()))
-			.json(&api::LoginData {
-				username: state.borrow().username.clone().unwrap(),
-				password: state.borrow().password.clone().unwrap(),
-			})
-			.send()
-			.unwrap()
-			.json()
-			.unwrap();
+		let state = state.clone();
+		wait!(execute(api_ctx.as_ref().unwrap().post("/api/v1/token/").json(&LoginData {
+			username: widgets.borrow().1.get_text().clone().unwrap(),
+			password: widgets.borrow().2.get_text().clone().unwrap(),
+		})) => |res| {
+			let res: Result<_, _> = res.json::<ApiResult<LoginInfo>>().unwrap().into();
 
-		state.borrow_mut().token = Some(res.token);
-		let main_page = crate::ui::main_page::render(state.clone());
-		main_page.show_all();
-        state.borrow_mut().stack.add_named(&main_page, "main");
-    	state.borrow_mut().stack.set_visible_child(&main_page);
-    	state.borrow_mut().stack.show_all();
+			if let Some(ref mut api) = *crate::api::API.lock().expect("3") {
+				api.auth(res.unwrap().token.clone());
+			}
+
+		    state.borrow_mut().stack.add_named(&crate::ui::main_page::render(state.clone()), "main");
+			state.borrow_mut().stack.set_visible_child_name("main");
+			state.borrow_mut().stack.show_all();
+		});
 	}));
 
 	cont.add(&title);

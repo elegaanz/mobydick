@@ -17,7 +17,7 @@ pub fn render(state: State) -> gtk::Box {
 	cont.set_margin_end(96);
 
 	let avatar_path = dirs::cache_dir().unwrap().join("funkload-avatar.png");
-	let user: api::UserInfo = reqwest::Client::new()
+	/*let user: api::UserInfo = reqwest::Client::new()
 		.get(&format!("https://{}/api/v1/users/users/me/", state.borrow().instance.clone().unwrap()))
 		.header(reqwest::header::AUTHORIZATION, format!("JWT {}", state.borrow().token.clone().unwrap_or_default()))
 		.send()
@@ -75,7 +75,7 @@ pub fn render(state: State) -> gtk::Box {
 	cont.add(&avatar);
 	let lbl = Label::new(format!("Welcome {}.", user.username).as_ref());
 	lbl.get_style_context().map(|c| c.add_class("h1"));
-	cont.add(&lbl);
+	cont.add(&lbl);*/
 
 	let search = SearchEntry::new();
 	search.set_placeholder_text("Search");
