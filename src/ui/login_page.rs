@@ -2,7 +2,6 @@ use gtk::*;
 use std::{
 	rc::Rc,
 	cell::RefCell,
-	ops::Deref
 };
 use crate::{State, api::*, ui::title};
 
@@ -14,10 +13,8 @@ pub fn render(state: State) -> gtk::Box {
 	let title = title("Login");
 
 	let instance = Input::new("Instance URL")
-		.with_placeholder("demo.funkwhale.audio")
-		.with_default(state.borrow().instance.clone().unwrap_or_default());
-	let username = Input::new("Username")
-		.with_default(state.borrow().username.clone().unwrap_or_default());
+		.with_placeholder("demo.funkwhale.audio");
+	let username = Input::new("Username");
 	let password = Input::new_password("Password");
 
 	let login_bt = Button::new_with_label("Login");
@@ -27,7 +24,7 @@ pub fn render(state: State) -> gtk::Box {
 		instance, username, password
 	)));
 	login_bt.connect_clicked(clone!(state, widgets => move |_| {
-		let mut api_ctx = crate::api::API.lock().expect("1");
+		let mut api_ctx = crate::api::API.lock().unwrap();
 		*api_ctx = Some(RequestContext::new(
 			widgets.borrow().0.get_text().unwrap()
 		));
@@ -39,11 +36,11 @@ pub fn render(state: State) -> gtk::Box {
 		})) => |res| {
 			let res: Result<_, _> = res.json::<ApiResult<LoginInfo>>().unwrap().into();
 
-			if let Some(ref mut api) = *crate::api::API.lock().expect("3") {
-				api.auth(res.unwrap().token.clone());
+			if let Some(ref mut client) = *crate::api::API.lock().unwrap() {
+				client.auth(res.unwrap().token.clone());
 			}
 
-		    state.borrow_mut().stack.add_named(&crate::ui::main_page::render(state.clone()), "main");
+			state.borrow_mut().stack.add_named(&crate::ui::main_page::render(), "main");
 			state.borrow_mut().stack.set_visible_child_name("main");
 			state.borrow_mut().stack.show_all();
 		});
@@ -81,11 +78,6 @@ impl<'a> Input<'a> {
 
 	fn with_placeholder(self, ph: &'a str) -> Input {
 		self.entry.set_placeholder_text(ph);
-		self
-	}
-
-	fn with_default<S: AsRef<str>>(self, def: S) -> Input<'a> {
-		self.entry.set_text(def.as_ref());
 		self
 	}
 

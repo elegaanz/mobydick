@@ -2,11 +2,10 @@ use gtk::{self, prelude::*, *};
 use std::{
 	cell::RefCell,
 	rc::Rc,
-	sync::Arc,
+	sync::{Arc, Mutex},
 	fs,
 	path::PathBuf,
 };
-use serde_json::json;
 
 macro_rules! clone {
     (@param _) => ( _ );
@@ -23,9 +22,30 @@ macro_rules! clone {
             move |$(clone!(@param $p),)+| $body
         }
     );
+    ($($n:ident),+) => (
+    	$( let $n = $n.clone(); )+
+    )
+}
+
+macro_rules! rc {
+	($($n:ident),+) => (
+    	$( let $n = std::rc::Rc::new(std::cell::RefCell::new($n)); )+
+    )
 }
 
 macro_rules! wait {
+	($exp:expr => | const $res:ident | $then:block) => {
+		let rx = $exp;
+		gtk::idle_add(move || {
+			match rx.try_recv() {
+				Err(_) => glib::Continue(true),
+				Ok($res) => {
+					$then;
+					glib::Continue(false)
+				},
+			}
+		})
+	};
 	($exp:expr => | $res:ident | $then:block) => {
 		let rx = $exp;
 		gtk::idle_add(move || {
@@ -40,35 +60,32 @@ macro_rules! wait {
 	}
 }
 
+macro_rules! client {
+	() => (crate::api::API.lock().unwrap().as_ref().unwrap())
+}
+
 mod api;
 mod ui;
 
 #[derive(Debug)]
 pub struct AppState {
-    instance: Option<String>,
-    username: Option<String>,
-    password: Option<String>,
-
-    token: Option<String>,
-
-    client: reqwest::Client,
-
-    search_result: Option<api::SearchResult>,
-
 	stack: Stack,
 	err_revealer: Revealer,
 	err_label: Label,
-
 	downloads: Arc<RefCell<Vec<Download>>>,
 }
 
 pub type State = Rc<RefCell<AppState>>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Download {
 	url: String,
 	done: bool,
 	output: PathBuf,
+}
+
+lazy_static! {
+	static ref DOWNLOADS: Arc<Mutex<Vec<Download>>> = Arc::new(Mutex::new(vec![]));
 }
 
 fn main() {
@@ -81,24 +98,20 @@ fn main() {
     window.set_title("Funkload");
     window.set_default_size(1080, 720);
 
-	let (token, instance, user) = fs::read("data.json").ok().and_then(|f|
-		serde_json::from_slice(&f).map(|json: serde_json::Value| (
-			json["token"].as_str().map(ToString::to_string),
-			json["instance"].as_str().map(ToString::to_string),
-			json["username"].as_str().map(ToString::to_string),
-		)).ok()
-	).unwrap_or((None, None, None));
+	let connected = fs::read("data.json").ok().and_then(|f| {
+		let json: serde_json::Value = serde_json::from_slice(&f).ok()?;
+		let mut api_ctx = crate::api::API.lock().ok()?;
+		let mut ctx = api::RequestContext::new(json["instance"].as_str()?.to_string());
+		ctx.auth(json["token"].as_str()?.to_string());
+		*api_ctx = Some(ctx);
+
+		Some(())
+	}).is_some();
 
 	let err_revealer = Revealer::new();
 	let err_label = Label::new("Error");
 	err_revealer.add(&err_label);
     let state = Rc::new(RefCell::new(AppState {
-    	client: reqwest::Client::new(),
-    	token: token,
-    	instance: instance,
-    	username: user,
-    	password: None,
-    	search_result: None,
     	stack: Stack::new(),
     	err_revealer: err_revealer,
     	err_label: err_label,
@@ -113,24 +126,19 @@ fn main() {
     window.add(&scrolled);
     window.show_all();
 
-    if state.borrow().instance.is_some() && state.borrow().token.is_some() {
-        let main_page = ui::main_page::render(state.clone());
+    if connected {
+        let main_page = ui::main_page::render();
         state.borrow().stack.add_named(&main_page, "main");
     	state.borrow().stack.set_visible_child_name("main");
-    	// state.borrow_mut().stack.show_all();
     }
 
-    window.connect_delete_event(clone!(state => move |_, _| {
+    window.connect_delete_event(move |_, _| {
         gtk::main_quit();
 
-        fs::write("data.json", serde_json::to_string(&json!({
-        	"token": state.borrow().token.clone(),
-        	"instance": state.borrow().instance.clone(),
-        	"username": state.borrow().username.clone(),
-        })).unwrap()).unwrap();
+        fs::write("data.json", serde_json::to_string(&client!().to_json()).unwrap()).unwrap();
 
         Inhibit(false)
-    }));
+    });
 
     gtk::main();
 }

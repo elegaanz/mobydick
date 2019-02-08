@@ -2,49 +2,23 @@ use gdk::ContextExt;
 use gdk_pixbuf::PixbufExt;
 use gtk::*;
 use std::{
-	cell::RefCell,
-	rc::Rc,
-	ops::Deref,
 	fs,
 };
-use crate::{State, api, ui::{title, card::Card}};
+use crate::{api::{self, execute}, ui::{title, card}};
 
-pub fn render(state: State) -> gtk::Box {
+pub fn render() -> gtk::Box {
 	let cont = gtk::Box::new(Orientation::Vertical, 12);
 	cont.set_margin_top(48);
 	cont.set_margin_bottom(48);
 	cont.set_margin_start(96);
 	cont.set_margin_end(96);
 
-	let avatar_path = dirs::cache_dir().unwrap().join("funkload-avatar.png");
-	/*let user: api::UserInfo = reqwest::Client::new()
-		.get(&format!("https://{}/api/v1/users/users/me/", state.borrow().instance.clone().unwrap()))
-		.header(reqwest::header::AUTHORIZATION, format!("JWT {}", state.borrow().token.clone().unwrap_or_default()))
-		.send()
-		.unwrap()
-		.json()
-		.unwrap();
-	let pb = match user.avatar.medium_square_crop {
-		Some(url) => {
-			let mut avatar_file = fs::File::create(avatar_path.clone()).unwrap();
-			reqwest::Client::new()
-				.get(&format!("https://{}{}", state.borrow().instance.clone().unwrap(), url))
-				.header(reqwest::header::AUTHORIZATION, format!("JWT {}", state.borrow().token.clone().unwrap_or_default()))
-				.send()
-				.unwrap()
-				.copy_to(&mut avatar_file)
-				.unwrap();
-			gdk_pixbuf::Pixbuf::new_from_file_at_scale(avatar_path, 128, 128, true).unwrap()
-		},
-		None => {
-			IconTheme::get_default().unwrap().load_icon("avatar-default", 128, IconLookupFlags::empty()).unwrap().unwrap()
-		}
-	};
+	let avatar_path = dirs::cache_dir().unwrap().join("funkload").join("avatar.png");
 
-    let avatar = DrawingArea::new();
+	let avatar = DrawingArea::new();
 	avatar.set_size_request(128, 128);
 	avatar.set_halign(Align::Center);
-	avatar.connect_draw(move |da, g| { // More or less stolen from Fractal (https://gitlab.gnome.org/GNOME/fractal/blob/master/fractal-gtk/src/widgets/avatar.rs)
+	avatar.connect_draw(clone!(avatar_path => move |da, g| { // More or less stolen from Fractal (https://gitlab.gnome.org/GNOME/fractal/blob/master/fractal-gtk/src/widgets/avatar.rs)
         use std::f64::consts::PI;
         let width = 128.0f64;
         let height = 128.0f64;
@@ -63,6 +37,9 @@ pub fn render(state: State) -> gtk::Box {
         );
         g.clip();
 
+        let pb = gdk_pixbuf::Pixbuf::new_from_file_at_scale(avatar_path.clone(), 128, 128, true)
+        	.unwrap_or_else(|_| IconTheme::get_default().unwrap().load_icon("avatar-default", 128, IconLookupFlags::empty()).unwrap().unwrap());
+
         let hpos: f64 = (width - (pb.get_height()) as f64) / 2.0;
         g.set_source_pixbuf(&pb, 0.0, hpos);
 
@@ -70,12 +47,11 @@ pub fn render(state: State) -> gtk::Box {
         g.fill();
 
     	Inhibit(false)
-	});
-
+	}));
 	cont.add(&avatar);
-	let lbl = Label::new(format!("Welcome {}.", user.username).as_ref());
-	lbl.get_style_context().map(|c| c.add_class("h1"));
-	cont.add(&lbl);*/
+	let welcome = Label::new("Welcome.");
+	welcome.get_style_context().map(|c| c.add_class("h1"));
+	cont.add(&welcome);
 
 	let search = SearchEntry::new();
 	search.set_placeholder_text("Search");
@@ -85,67 +61,64 @@ pub fn render(state: State) -> gtk::Box {
 	results.set_valign(Align::Start);
 	cont.add(&results);
 
-	let widgets = Rc::new(RefCell::new(
-		(search, results)
-	));
-	let state = state.clone();
-	widgets.clone().borrow().0.connect_activate(move |_| {
-		let res: api::SearchResult = reqwest::Client::new()
-			.get(&format!("https://{}/api/v1/search", state.borrow().instance.clone().unwrap()))
-			.header(reqwest::header::AUTHORIZATION, format!("JWT {}", state.borrow().token.clone().unwrap_or_default()))
-			.query(&api::SearchQuery {
-				query: widgets.borrow().deref().0.get_text().unwrap_or_default()
-			})
-			.send()
-			.unwrap()
-			.json()
-			.unwrap();
+	rc!(welcome, avatar, results);
+	clone!(welcome, avatar, results, avatar_path);
+	wait!(execute(client!().get("/api/v1/users/users/me")) => |res| {
+		let res: api::UserInfo = res.json().unwrap();
 
-		state.borrow_mut().search_result = Some(res.clone());
-		println!("{:#?}", res);
-		update_results(state.clone(), &widgets.borrow().1);
+		welcome.borrow().set_text(format!("Welcome {}.", res.username).as_ref());
+
+		clone!(avatar_path, avatar);
+		wait!(execute(client!().get(&res.avatar.medium_square_crop.unwrap_or_default())) => |avatar_dl| {
+			let mut avatar_file = fs::File::create(avatar_path.clone()).unwrap();
+			avatar_dl.copy_to(&mut avatar_file).unwrap();
+			avatar.borrow().queue_draw();
+		});
+	});
+
+	search.connect_activate(move |s| {
+		let results = results.clone();
+		wait!(execute(client!().get("/api/v1/search").query(&api::SearchQuery {
+			query: s.get_text().unwrap_or_default()
+		})) => |res| {
+			update_results(res.json().unwrap(), &results.borrow());
+		});
 	});
 
 	cont.show_all();
 	cont
 }
 
-fn update_results(state: State, cont: &gtk::Box) {
+fn update_results(res: api::SearchResult, cont: &gtk::Box) {
 	for ch in cont.get_children() {
 		cont.remove(&ch);
 	}
 
-	match &state.borrow().search_result {
-		Some(res) => {
-			if res.artists.is_empty() && res.albums.is_empty() && res.tracks.is_empty() {
-				cont.add(&Label::new("No results. Try something else."));
-			}
+	if res.artists.is_empty() && res.albums.is_empty() && res.tracks.is_empty() {
+		cont.add(&Label::new("No results. Try something else."));
+	}
 
-			if !res.artists.is_empty() {
-				cont.add(&title("Artists"));
-				for artist in res.artists.clone() {
-					cont.add(&Card::new(artist, state.clone()).render());
-				}
-			}
-
-			if !res.albums.is_empty() {
-				cont.add(&title("Albums"));
-				for album in res.albums.clone() {
-					cont.add(&Card::new(album, state.clone()).render());
-				}
-			}
-
-			if !res.tracks.is_empty() {
-				cont.add(&title("Songs"));
-				for track in res.tracks.clone() {
-					cont.add(&Card::new(track, state.clone()).render());
-				}
-			}
-		},
-		None => {
-			cont.add(&Label::new("Try to search something"));
+	if !res.artists.is_empty() {
+		cont.add(&title("Artists"));
+		for artist in res.artists.clone() {
+			cont.add(&*card::render(artist).borrow());
 		}
 	}
+
+	if !res.albums.is_empty() {
+		cont.add(&title("Albums"));
+		for album in res.albums.clone() {
+			cont.add(&*card::render(album).borrow());
+		}
+	}
+
+	if !res.tracks.is_empty() {
+		cont.add(&title("Songs"));
+		for track in res.tracks.clone() {
+			cont.add(&*card::render(track).borrow());
+		}
+	}
+
 	cont.show_all();
 }
 

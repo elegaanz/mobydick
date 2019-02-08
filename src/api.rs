@@ -2,11 +2,10 @@ use serde_derive::*;
 use lazy_static::*;
 use workerpool::Worker;
 use std::{
-	cell::RefCell,
 	sync::{
 		Arc,
 		mpsc::{channel, Receiver},
-		Mutex, MutexGuard
+		Mutex,
 	},
 };
 
@@ -53,6 +52,13 @@ impl RequestContext {
 	pub fn post<S: AsRef<str>>(&self, url: S) -> reqwest::RequestBuilder {
 		self.client
 			.post(&format!("https://{}{}", self.instance, url.as_ref()))
+	}
+
+	pub fn to_json(&self) -> serde_json::Value {
+		serde_json::json!({
+			"token": self.token,
+			"instance": self.instance,
+		})
 	}
 }
 
@@ -151,7 +157,6 @@ pub struct Track {
 	pub album: Album,
 	pub artist: ArtistPreview,
 	pub listen_url: String,
-	pub uploads: Option<Vec<Upload>>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -165,23 +170,5 @@ pub struct AlbumTrack {
 	pub title: String,
 	pub artist: ArtistPreview,
 	pub listen_url: String,
-	pub uploads: Option<Vec<Upload>>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct Upload {
-	pub extension: String,
-	pub listen_url: String,
-}
-
-impl Upload {
-	pub fn get_for_track(track_id: i32, instance: String, jwt: String) -> Option<Upload> {
-		let track: Track = reqwest::Client::new()
-			.get(&format!("https://{}/api/v1/tracks/{}/", instance, track_id))
-			.header(reqwest::header::AUTHORIZATION, format!("JWT {}", jwt.clone()))
-			.send().unwrap()
-			.json().unwrap();
-		println!("uploads : {:#?}", track);
-		track.uploads.unwrap_or_default().into_iter().next()
-	}
-}
