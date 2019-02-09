@@ -2,3 +2,4 @@
 **/*.rs.bk
 .buildconfig
 data.json
+debian

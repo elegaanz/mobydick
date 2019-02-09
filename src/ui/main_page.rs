@@ -6,7 +6,7 @@ use std::{
 };
 use crate::{api::{self, execute}, ui::{title, card}};
 
-pub fn render() -> gtk::Box {
+pub fn render(header: &HeaderBar, switcher: &StackSwitcher) -> gtk::Box {
 	let cont = gtk::Box::new(Orientation::Vertical, 12);
 	cont.set_margin_top(48);
 	cont.set_margin_bottom(48);
@@ -16,12 +16,12 @@ pub fn render() -> gtk::Box {
 	let avatar_path = dirs::cache_dir().unwrap().join("funkload").join("avatar.png");
 
 	let avatar = DrawingArea::new();
-	avatar.set_size_request(128, 128);
+	avatar.set_size_request(32, 32);
 	avatar.set_halign(Align::Center);
 	avatar.connect_draw(clone!(avatar_path => move |da, g| { // More or less stolen from Fractal (https://gitlab.gnome.org/GNOME/fractal/blob/master/fractal-gtk/src/widgets/avatar.rs)
         use std::f64::consts::PI;
-        let width = 128.0f64;
-        let height = 128.0f64;
+        let width = 32.0f64;
+        let height = 32.0f64;
 
         g.set_antialias(cairo::Antialias::Best);
 
@@ -37,8 +37,8 @@ pub fn render() -> gtk::Box {
         );
         g.clip();
 
-        let pb = gdk_pixbuf::Pixbuf::new_from_file_at_scale(avatar_path.clone(), 128, 128, true)
-        	.unwrap_or_else(|_| IconTheme::get_default().unwrap().load_icon("avatar-default", 128, IconLookupFlags::empty()).unwrap().unwrap());
+        let pb = gdk_pixbuf::Pixbuf::new_from_file_at_scale(avatar_path.clone(), 32, 32, true)
+        	.unwrap_or_else(|_| IconTheme::get_default().unwrap().load_icon("avatar-default", 32, IconLookupFlags::empty()).unwrap().unwrap());
 
         let hpos: f64 = (width - (pb.get_height()) as f64) / 2.0;
         g.set_source_pixbuf(&pb, 0.0, hpos);
@@ -48,10 +48,9 @@ pub fn render() -> gtk::Box {
 
     	Inhibit(false)
 	}));
-	cont.add(&avatar);
-	let welcome = Label::new("Welcome.");
-	welcome.get_style_context().map(|c| c.add_class("h1"));
-	cont.add(&welcome);
+	header.pack_start(&avatar);
+	header.set_custom_title(&*switcher);
+	header.show_all();
 
 	let search = SearchEntry::new();
 	search.set_placeholder_text("Search");
@@ -61,12 +60,12 @@ pub fn render() -> gtk::Box {
 	results.set_valign(Align::Start);
 	cont.add(&results);
 
-	rc!(welcome, avatar, results);
-	clone!(welcome, avatar, results, avatar_path);
+	rc!(avatar, results);
+	clone!(avatar, results, avatar_path);
 	wait!(execute(client!().get("/api/v1/users/users/me")) => |res| {
 		let res: api::UserInfo = res.json().unwrap();
 
-		welcome.borrow().set_text(format!("Welcome {}.", res.username).as_ref());
+		avatar.borrow().set_tooltip_text(format!("Connected as {}.", res.username).as_ref());
 
 		clone!(avatar_path, avatar);
 		wait!(execute(client!().get(&res.avatar.medium_square_crop.unwrap_or_default())) => |avatar_dl| {

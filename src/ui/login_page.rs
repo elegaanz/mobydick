@@ -34,15 +34,28 @@ pub fn render(state: State) -> gtk::Box {
 			username: widgets.borrow().1.get_text().clone().unwrap(),
 			password: widgets.borrow().2.get_text().clone().unwrap(),
 		})) => |res| {
-			let res: Result<_, _> = res.json::<ApiResult<LoginInfo>>().unwrap().into();
+			let res: Result<LoginInfo, _> = res.json();
 
-			if let Some(ref mut client) = *crate::api::API.lock().unwrap() {
-				client.auth(res.unwrap().token.clone());
+			match res {
+				Err(_) => crate::show_error(state.clone(), "Somehting went wrong, check your username and password, and the URL of your instance."),
+				Ok(res) => {
+					if let Some(ref mut client) = *crate::api::API.lock().unwrap() {
+						client.auth(res.token.clone());
+					}
+
+					let state = state.borrow();
+					state.error.set_revealed(false);
+					state.stack.add_titled(&crate::ui::main_page::render(&state.header, &{
+						let s = StackSwitcher::new();
+						s.set_stack(&state.stack);
+						s
+					}), "main", "Search Music");
+					state.stack.set_visible_child_name("main");
+			        state.stack.add_titled(&*crate::ui::dl_list::render().borrow(), "downloads", "Downloads");
+					state.stack.remove(&state.stack.get_child_by_name("login").unwrap()); // To avoid having a "Login" tab in the header
+					state.stack.show_all();
+				}
 			}
-
-			state.borrow_mut().stack.add_named(&crate::ui::main_page::render(), "main");
-			state.borrow_mut().stack.set_visible_child_name("main");
-			state.borrow_mut().stack.show_all();
 		});
 	}));
 

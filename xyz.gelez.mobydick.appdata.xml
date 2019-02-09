@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="addon">
+  <id>xyz.gelez.mobydick</id>
+  <name>Mobydick</name>
+  <summary>Download music from your Funkwhale instance</summary>
+  <screenshots>
+      <screenshot type="default">
+          <image>https://raw.githubusercontent.com/BaptisteGelez/mobydick/master/screen-main.png</image>
+      </screenshot>
+      <screenshot type="default">
+          <image>https://raw.githubusercontent.com/BaptisteGelez/mobydick/master/screen-list.png</image>
+      </screenshot>
+  </screenshots>
+  <url type="bugtracker">https://github.com/BaptisteGelez/mobydick/issues</url>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0</project_license>
+</component>

@@ -1,6 +1,7 @@
 use gtk::prelude::*;
 
 pub mod card;
+pub mod dl_list;
 pub mod login_page;
 pub mod main_page;
 pub mod network_image;

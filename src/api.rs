@@ -74,22 +74,6 @@ impl Worker for Req {
 	}
 }
 
-#[derive(Deserialize)]
-#[serde(untagged)]
-pub enum ApiResult<T> {
-	Ok(T),
-	Err
-}
-
-impl<T> Into<Result<T, ()>> for ApiResult<T> {
-	fn into(self) -> Result<T, ()> {
-		match self {
-			ApiResult::Ok(t) => Ok(t),
-			ApiResult::Err => Err(()),
-		}
-	}
-}
-
 #[derive(Deserialize, Serialize)]
 pub struct LoginData {
 	pub password: String,
@@ -172,3 +156,16 @@ pub struct AlbumTrack {
 	pub listen_url: String,
 }
 
+impl AlbumTrack {
+	pub fn into_full(self, album: &Album) -> Track {
+		let mut album = album.clone();
+		album.tracks = None;
+		Track {
+			album: album,
+			id: self.id,
+			title: self.title,
+			artist: self.artist,
+			listen_url: self.listen_url,
+		}
+	}
+}

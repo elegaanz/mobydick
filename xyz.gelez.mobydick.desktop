@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Mobydick
+Comment=Download music from Funkwhale
+Exec=xyz.gelez.mobydick %U
+Icon=mobydick
+Keywords=Music;Funkwhale;
+Terminal=false
+Type=Application
+StartupNotify=true
+Categories=GNOME;GTK;Network;Music;

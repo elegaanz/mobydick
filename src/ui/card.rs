@@ -1,6 +1,6 @@
 use gtk::*;
-use std::{fs, thread, sync::mpsc::channel, rc::Rc, cell::RefCell};
-use crate::{Download, api::{self, execute}, ui::network_image::NetworkImage};
+use std::{thread, sync::mpsc::channel, rc::Rc, cell::RefCell};
+use crate::{Download, DlStatus, api, ui::network_image::NetworkImage};
 
 pub fn render<T>(model: T) -> Rc<RefCell<Grid>> where T: CardModel + 'static {
 	let card = Grid::new();
@@ -21,66 +21,107 @@ pub fn render<T>(model: T) -> Rc<RefCell<Grid>> where T: CardModel + 'static {
 	sub_text.set_hexpand(true);
 	sub_text.set_halign(Align::Start);
 
-	let dl_bt = Button::new_with_label("Download");
-	dl_bt.set_valign(Align::Center);
-	dl_bt.set_vexpand(true);
-	dl_bt.get_style_context().map(|c| c.add_class("suggested-action"));
+	rc!(card);
+	if let Some(dl) = model.download_status() {
+		match dl.status {
+			DlStatus::Done => {
+				let open_bt = Button::new_with_label("Play");
+				open_bt.set_valign(Align::Center);
+				open_bt.set_vexpand(true);
+				open_bt.get_style_context().map(|c| c.add_class("suggested-action"));
 
-	rc!(dl_bt, card);
-	{
-		clone!(dl_bt, card);
-		wait!({ // Fetch the list of files to download
-			let (tx, rx) = channel();
-			thread::spawn(move || {
-				let dl_list = model.downloads();
-				tx.send(dl_list).unwrap();
-			});
-			rx
-		} => | const dl_list | {
-			let dl_bt = dl_bt.borrow();
-			println!("DLs: {:?}", dl_list);
-			if dl_list.is_empty() {	// Nothing to download
-				dl_bt.set_label("Not available");
-				dl_bt.set_sensitive(false);
-			} else {
-				clone!(dl_list);
-				dl_bt.connect_clicked(move |_| {
-					for dl in dl_list.clone() {
-						thread::spawn(move || {
-							let mut res = client!().get(&dl.url).send().unwrap();
-
-							let ext = res.headers()
-								.get(reqwest::header::CONTENT_DISPOSITION).and_then(|h| h.to_str().ok())
-								.unwrap_or(".mp3")
-								.rsplitn(2, ".").next().unwrap_or("mp3");
-
-							fs::create_dir_all(dl.output.clone().parent().unwrap()).unwrap();
-							let mut out = dl.output.clone();
-							out.set_extension(ext);
-							let mut file = fs::File::create(out).unwrap();
-
-							println!("saving {} in {:?}", dl.url.clone(), dl.output.clone());
-							res.copy_to(&mut file).unwrap();
-							println!("saved {:?}", dl.output);
-						});
-					}
+				let out = dl.output.clone();
+				open_bt.connect_clicked(move |_| {
+					open::that(out.clone()).unwrap();
+					println!("opened file");
 				});
-			}
+				card.borrow().attach(&open_bt, 3, 0, 1, 2);
 
-			if dl_list.len() > 1 { // Not only one song
-				let more_bt = Button::new_with_label("Details");
-				more_bt.set_valign(Align::Center);
-				more_bt.set_vexpand(true);
-				card.borrow().attach(&more_bt, 2, 0, 1, 2);
+				let open_bt = Button::new_with_label("View File");
+				open_bt.set_valign(Align::Center);
+				open_bt.set_vexpand(true);
+
+				let out = dl.output.clone();
+				open_bt.connect_clicked(move |_| {
+					open::that(out.parent().unwrap().clone()).unwrap();
+					println!("opened folder");
+				});
+				card.borrow().attach(&open_bt, 2, 0, 1, 2);
+			},
+			DlStatus::Planned | DlStatus::Started => {
+				let cancel_bt = Button::new_with_label("Cancel");
+				cancel_bt.set_valign(Align::Center);
+				cancel_bt.set_vexpand(true);
+				cancel_bt.get_style_context().map(|c| c.add_class("destructive-action"));
+
+				let track_id = dl.track.id;
+				cancel_bt.connect_clicked(move |_| {
+					let mut dls = crate::DOWNLOADS.lock().unwrap();
+					let mut dl = dls.get_mut(&track_id).unwrap();
+					dl.status = DlStatus::Cancelled;
+					println!("Cancelled");
+				});
+				card.borrow().attach(&cancel_bt, 3, 0, 1, 2);
+
+				if dl.status == DlStatus::Planned {
+					sub_text.set_text(format!("{} — Waiting to download", model.subtext()).as_ref());
+				} else {
+					sub_text.set_text(format!("{} — Download in progress", model.subtext()).as_ref());
+				}
 			}
-		});
+			DlStatus::Cancelled => {
+				sub_text.set_text(format!("{} — Cancelled", model.subtext()).as_ref());
+			}
+		}
+	} else {
+		let dl_bt = Button::new_with_label("Download");
+		dl_bt.set_valign(Align::Center);
+		dl_bt.set_vexpand(true);
+		dl_bt.get_style_context().map(|c| c.add_class("suggested-action"));
+
+		rc!(dl_bt);
+		{
+			clone!(dl_bt, card);
+			wait!({ // Fetch the list of files to download
+				let (tx, rx) = channel();
+				thread::spawn(move || {
+					let dl_list = model.downloads();
+					tx.send(dl_list).unwrap();
+				});
+				rx
+			} => | const dl_list | {
+				let dl_bt = dl_bt.borrow();
+				if dl_list.is_empty() {	// Nothing to download
+					dl_bt.set_label("Not available");
+					dl_bt.set_sensitive(false);
+				} else {
+					clone!(dl_list);
+					dl_bt.connect_clicked(move |_| {
+						for dl in dl_list.clone() {
+							let mut dls = crate::DOWNLOADS.lock().unwrap();
+							dls.insert(dl.track.id, dl.clone());
+
+							crate::DL_JOBS.execute(dl);
+						}
+					});
+				}
+
+				if dl_list.len() > 1 { // Not only one song
+					let more_bt = Button::new_with_label("Details");
+					more_bt.set_valign(Align::Center);
+					more_bt.set_vexpand(true);
+					card.borrow().attach(&more_bt, 2, 0, 1, 2);
+				}
+			});
+		}
+
+		card.borrow().attach(&*dl_bt.borrow(), 3, 0, 1, 2);
 	}
 
 	{
 		let card = card.borrow();
 		card.attach(&main_text, 1, 0, 1, 1);
 		card.attach(&sub_text, 1, 1, 1, 1);
-		card.attach(&*dl_bt.borrow(), 3, 0, 1, 2);
 	}
 
 	card
@@ -96,6 +137,10 @@ pub trait CardModel: Clone + Send + Sync {
 	}
 
 	fn downloads(&self) -> Vec<Download>;
+
+	fn download_status(&self) -> Option<Download> {
+		None
+	}
 }
 
 impl CardModel for api::Artist {
@@ -120,14 +165,15 @@ impl CardModel for api::Artist {
 				.send().unwrap()
 				.json().unwrap();
 
-			for track in album.tracks.unwrap_or_default() {
+			for track in album.clone().tracks.unwrap_or_default() {
 				dls.push(Download {
 					url: track.listen_url.clone(),
 					output: dirs::audio_dir().unwrap()
 						.join(self.name.clone())
 						.join(album.title.clone())
 						.join(format!("{}.mp3", track.title.clone())),
-					done: false,
+					status: DlStatus::Planned,
+					track: track.clone().into_full(&album),
 				});
 			}
 		}
@@ -156,7 +202,8 @@ impl CardModel for api::Album {
 					.join(self.artist.name.clone())
 					.join(self.title.clone())
 					.join(format!("{}.mp3", track.title.clone())),
-				done: false,
+				status: DlStatus::Planned,
+				track: track.clone().into_full(&self),
 			}
 		).collect()
 	}
@@ -182,7 +229,12 @@ impl CardModel for api::Track {
 				.join(self.artist.name.clone())
 				.join(self.album.title.clone())
 				.join(format!("{}.mp3", self.title.clone())),
-			done: false,
+			status: DlStatus::Planned,
+			track: self.clone(),
 		}]
+	}
+
+	fn download_status(&self) -> Option<Download> {
+		crate::DOWNLOADS.lock().ok()?.get(&self.id).map(|x| x.clone())
 	}
 }
