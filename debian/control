@@ -1,4 +1,4 @@
-Source: xyz.gelez.mobydick
+Source: com.github.baptistegelez.mobydick
 Section: net
 Maintainer: Elza Gelez <elza@gelez.xyz>
 Build-Depends: rustc
@@ -9,7 +9,7 @@ Build-Depends: rustc
 Standards-Version: 3.9.5
 Homepage: https://github.com/BaptisteGelez/mobydick
 
-Package: xyz.gelez.mobydick
+Package: com.github.baptistegelez.mobydick
 Architecture: any
 Priority: optional
 Depends: ${misc:Depends},
