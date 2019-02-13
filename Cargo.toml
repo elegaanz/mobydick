@@ -1,7 +1,10 @@
 [package]
 name = "mobydick"
 version = "0.1.0"
-authors = ["Baptiste Gelez <baptiste@gelez.xyz>"]
+authors = ["Elza Gelez <elza@gelez.xyz>"]
+license = "LICENSE"
+readme = "README.md"
+description = "Download music from your Funkwhale instance"
 edition = "2018"
 
 [dependencies]
@@ -18,3 +21,18 @@ reqwest = "0.9"
 workerpool = "1.1.1"
 lazy_static = "1.2"
 open = "1.2"
+
+[package.metadata.deb]
+maintainer = "Elza Gelez <elza@gelez.xyz>"
+copyright = "2019, Elza Gelez"
+license-file = ["LICENSE", "2"]
+depends = "$auto"
+section = "utils"
+priority = "optional"
+assets = [
+    # binary
+    ["target/release/mobydick", "usr/bin/", "755"],
+    # assets
+    ["icons/mobydick.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["mobydick.desktop", "usr/share/applications/", "644"],
+]

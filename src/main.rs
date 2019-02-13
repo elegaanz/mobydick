@@ -152,8 +152,8 @@ fn main() {
     }
 
     let window = Window::new(WindowType::Toplevel);
-    window.set_icon_from_file("icons/128.svg");
-    window.set_title("Funkload");
+    window.set_icon_from_file("icons/128.svg").ok();
+    window.set_title("Mobydick");
     window.set_default_size(1080, 720);
 
 	let connected = fs::read(dirs::config_dir().unwrap().join("mobydick").join("data.json")).ok().and_then(|f| {
@@ -185,7 +185,7 @@ fn main() {
     	header: {
     		let h = HeaderBar::new();
     		h.set_show_close_button(true);
-    		h.set_title("Funkload");
+    		h.set_title("Mobydick");
     		h
     	},
     }));
@@ -217,6 +217,7 @@ fn main() {
     window.connect_delete_event(move |_, _| {
         gtk::main_quit();
 
+	fs::create_dir_all(dirs::config_dir().unwrap().join("mobydick")).unwrap();
         fs::write(
         	dirs::config_dir().unwrap().join("mobydick").join("data.json"),
         	serde_json::to_string(&client!().to_json()).unwrap()

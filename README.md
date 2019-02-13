@@ -1,4 +1,4 @@
-# Funkload
+# Mobydick
 
 GTK+ app to download music from Funkwhale
 

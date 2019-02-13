@@ -13,7 +13,7 @@ pub fn render(header: &HeaderBar, switcher: &StackSwitcher) -> gtk::Box {
 	cont.set_margin_start(96);
 	cont.set_margin_end(96);
 
-	let avatar_path = dirs::cache_dir().unwrap().join("funkload").join("avatar.png");
+	let avatar_path = dirs::cache_dir().unwrap().join("mobydick").join("avatar.png");
 
 	let avatar = DrawingArea::new();
 	avatar.set_size_request(32, 32);
@@ -69,6 +69,7 @@ pub fn render(header: &HeaderBar, switcher: &StackSwitcher) -> gtk::Box {
 
 		clone!(avatar_path, avatar);
 		wait!(execute(client!().get(&res.avatar.medium_square_crop.unwrap_or_default())) => |avatar_dl| {
+			fs::create_dir_all(avatar_path.parent().unwrap()).unwrap();
 			let mut avatar_file = fs::File::create(avatar_path.clone()).unwrap();
 			avatar_dl.copy_to(&mut avatar_file).unwrap();
 			avatar.borrow().queue_draw();

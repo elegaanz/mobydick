@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=Mobydick
 Comment=Download music from Funkwhale
-Exec=xyz.gelez.mobydick %U
+Exec=mobydick %U
 Icon=mobydick
 Keywords=Music;Funkwhale;
 Terminal=false
