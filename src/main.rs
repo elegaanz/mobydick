@@ -70,6 +70,7 @@ mod ui;
 
 #[derive(Debug)]
 pub struct AppState {
+	window: Rc<RefCell<Window>>,
 	stack: Stack,
 	error: InfoBar,
 	header: HeaderBar,
@@ -156,6 +157,24 @@ fn main() {
     window.set_title("Mobydick");
     window.set_default_size(1080, 720);
 
+    window.connect_delete_event(move |_, _| {
+        gtk::main_quit();
+
+		fs::create_dir_all(dirs::config_dir().unwrap().join("mobydick")).unwrap();
+        fs::write(
+        	dirs::config_dir().unwrap().join("mobydick").join("data.json"),
+        	serde_json::to_string(&client!().to_json()).unwrap()
+        ).unwrap();
+
+        Inhibit(false)
+    });
+
+    init(Rc::new(RefCell::new(window)));
+
+    gtk::main();
+}
+
+fn init(window: Rc<RefCell<Window>>) {
 	let connected = fs::read(dirs::config_dir().unwrap().join("mobydick").join("data.json")).ok().and_then(|f| {
 		let json: serde_json::Value = serde_json::from_slice(&f).ok()?;
 		let mut api_ctx = crate::api::API.lock().ok()?;
@@ -167,6 +186,7 @@ fn main() {
 	}).is_some();
 
     let state = Rc::new(RefCell::new(AppState {
+    	window: window.clone(),
     	stack: {
     		let s = Stack::new();
     		s.set_vexpand(true);
@@ -196,16 +216,20 @@ fn main() {
 
     let scrolled = ScrolledWindow::new(None, None);
     scrolled.add(&main_box);
-    window.add(&scrolled);
-    window.set_titlebar(&state.borrow().header);
-    window.show_all();
+    window.borrow().add(&scrolled);
+    window.borrow().set_titlebar(&state.borrow().header);
+    window.borrow().show_all();
 
     if connected {
-        let main_page = ui::main_page::render(&state.borrow().header, &{
-			let s = StackSwitcher::new();
-			s.set_stack(&state.borrow().stack);
-			s
-		});
+        let main_page = ui::main_page::render(
+        	state.borrow().window.clone(),
+        	&state.borrow().header,
+        	&{
+				let s = StackSwitcher::new();
+				s.set_stack(&state.borrow().stack);
+				s
+			}
+		);
         state.borrow().stack.add_titled(&main_page, "main", "Search Music");
         state.borrow().stack.add_titled(&*ui::dl_list::render().borrow(), "downloads", "Downloads");
     	state.borrow().stack.set_visible_child_name("main");
@@ -213,20 +237,6 @@ fn main() {
     	let login_page = ui::login_page::render(state.clone());
     	state.borrow().stack.add_named(&login_page, "login");
     }
-
-    window.connect_delete_event(move |_, _| {
-        gtk::main_quit();
-
-	fs::create_dir_all(dirs::config_dir().unwrap().join("mobydick")).unwrap();
-        fs::write(
-        	dirs::config_dir().unwrap().join("mobydick").join("data.json"),
-        	serde_json::to_string(&client!().to_json()).unwrap()
-        ).unwrap();
-
-        Inhibit(false)
-    });
-
-    gtk::main();
 }
 
 fn show_error(state: State, msg: &str) {
@@ -237,4 +247,17 @@ fn show_error(state: State, msg: &str) {
 	b.add(&Label::new(msg));
 	state.borrow().error.show_all();
 	state.borrow().error.set_revealed(true);
+}
+
+fn logout(window: Rc<RefCell<Window>>) {
+	fs::remove_file(dirs::config_dir().unwrap().join("mobydick").join("data.json")).ok();
+	*api::API.lock().unwrap() = None;
+	*DOWNLOADS.lock().unwrap() = HashMap::new();
+	{
+		let window = window.borrow();
+		for ch in window.get_children() {
+			window.remove(&ch);
+		}
+	}
+	init(window)
 }

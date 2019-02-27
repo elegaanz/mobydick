@@ -25,8 +25,12 @@ pub fn render(state: State) -> gtk::Box {
 	)));
 	login_bt.connect_clicked(clone!(state, widgets => move |_| {
 		let mut api_ctx = crate::api::API.lock().unwrap();
+		let mut instance_url = widgets.borrow().0.get_text().unwrap().trim_end_matches('/').to_string();
+		if !(instance_url.starts_with("http://") || instance_url.starts_with("https://")) {
+			instance_url = format!("https://{}", instance_url)
+		}
 		*api_ctx = Some(RequestContext::new(
-			widgets.borrow().0.get_text().unwrap()
+			instance_url
 		));
 
 		let state = state.clone();
@@ -45,11 +49,16 @@ pub fn render(state: State) -> gtk::Box {
 
 					let state = state.borrow();
 					state.error.set_revealed(false);
-					state.stack.add_titled(&crate::ui::main_page::render(&state.header, &{
-						let s = StackSwitcher::new();
-						s.set_stack(&state.stack);
-						s
-					}), "main", "Search Music");
+					state.stack.add_titled(&crate::ui::main_page::render(
+						state.window.clone(),
+						&state.header,
+						&{
+							let s = StackSwitcher::new();
+							s.set_stack(&state.stack);
+							s
+						}
+					),
+					"main", "Search Music");
 					state.stack.set_visible_child_name("main");
 			        state.stack.add_titled(&*crate::ui::dl_list::render().borrow(), "downloads", "Downloads");
 					state.stack.remove(&state.stack.get_child_by_name("login").unwrap()); // To avoid having a "Login" tab in the header
@@ -59,11 +68,25 @@ pub fn render(state: State) -> gtk::Box {
 		});
 	}));
 
-	cont.add(&title);
-	cont.add(&widgets.borrow().0.render());
-	cont.add(&widgets.borrow().1.render());
-	cont.add(&widgets.borrow().2.render());
-	cont.add(&login_bt);
+	{
+
+		let (ref instance, ref username, ref password) = *widgets.borrow();
+		cont.add(&title);
+		cont.add(&instance.render());
+		cont.add(&username.render());
+		cont.add(&password.render());
+		cont.add(&login_bt);
+	}
+
+	widgets.borrow().0.entry.connect_activate(clone!(widgets => move |_| {
+		widgets.borrow().1.entry.grab_focus();
+	}));
+	widgets.borrow().1.entry.connect_activate(clone!(widgets => move |_| {
+		widgets.borrow().2.entry.grab_focus();
+	}));
+	widgets.borrow().2.entry.connect_activate(move |_| {
+		login_bt.clicked();
+	});
 
 	cont.show_all();
 	cont

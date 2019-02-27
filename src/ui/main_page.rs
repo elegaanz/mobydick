@@ -2,11 +2,13 @@ use gdk::ContextExt;
 use gdk_pixbuf::PixbufExt;
 use gtk::*;
 use std::{
+	cell::RefCell,
 	fs,
+	rc::Rc,
 };
 use crate::{api::{self, execute}, ui::{title, card}};
 
-pub fn render(header: &HeaderBar, switcher: &StackSwitcher) -> gtk::Box {
+pub fn render(window: Rc<RefCell<Window>>, header: &HeaderBar, switcher: &StackSwitcher) -> gtk::Box {
 	let cont = gtk::Box::new(Orientation::Vertical, 12);
 	cont.set_margin_top(48);
 	cont.set_margin_bottom(48);
@@ -50,6 +52,12 @@ pub fn render(header: &HeaderBar, switcher: &StackSwitcher) -> gtk::Box {
 	}));
 	header.pack_start(&avatar);
 	header.set_custom_title(&*switcher);
+
+	let logout_bt = Button::new_from_icon_name("system-log-out", IconSize::LargeToolbar.into());
+	logout_bt.connect_clicked(clone!(window => move |_| {
+		crate::logout(window.clone());
+	}));
+	header.pack_end(&logout_bt);
 	header.show_all();
 
 	let search = SearchEntry::new();
@@ -63,17 +71,23 @@ pub fn render(header: &HeaderBar, switcher: &StackSwitcher) -> gtk::Box {
 	rc!(avatar, results);
 	clone!(avatar, results, avatar_path);
 	wait!(execute(client!().get("/api/v1/users/users/me")) => |res| {
-		let res: api::UserInfo = res.json().unwrap();
+		let res: Result<api::UserInfo, _> = res.json();
+		match res {
+			Ok(res) => {
+				avatar.borrow().set_tooltip_text(format!("Connected as {}.", res.username).as_ref());
 
-		avatar.borrow().set_tooltip_text(format!("Connected as {}.", res.username).as_ref());
-
-		clone!(avatar_path, avatar);
-		wait!(execute(client!().get(&res.avatar.medium_square_crop.unwrap_or_default())) => |avatar_dl| {
-			fs::create_dir_all(avatar_path.parent().unwrap()).unwrap();
-			let mut avatar_file = fs::File::create(avatar_path.clone()).unwrap();
-			avatar_dl.copy_to(&mut avatar_file).unwrap();
-			avatar.borrow().queue_draw();
-		});
+				clone!(avatar_path, avatar);
+				wait!(execute(client!().get(&res.avatar.medium_square_crop.unwrap_or_default())) => |avatar_dl| {
+					fs::create_dir_all(avatar_path.parent().unwrap()).unwrap();
+					let mut avatar_file = fs::File::create(avatar_path.clone()).unwrap();
+					avatar_dl.copy_to(&mut avatar_file).unwrap();
+					avatar.borrow().queue_draw();
+				});
+			},
+			Err(_) => {
+				crate::logout(window.clone());
+			}
+		}
 	});
 
 	search.connect_activate(move |s| {

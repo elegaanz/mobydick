@@ -44,14 +44,14 @@ impl RequestContext {
 
 	pub fn get<S: AsRef<str>>(&self, url: S) -> reqwest::RequestBuilder {
 		self.client
-			.get(&format!("https://{}{}", self.instance, url.as_ref()))
+			.get(&format!("{}{}", self.instance, url.as_ref()))
 			.header(reqwest::header::AUTHORIZATION, format!("JWT {}", self.token))
 	}
 
 	/// Warning: no authentication, since it is only used for login
 	pub fn post<S: AsRef<str>>(&self, url: S) -> reqwest::RequestBuilder {
 		self.client
-			.post(&format!("https://{}{}", self.instance, url.as_ref()))
+			.post(&format!("{}{}", self.instance, url.as_ref()))
 	}
 
 	pub fn to_json(&self) -> serde_json::Value {
