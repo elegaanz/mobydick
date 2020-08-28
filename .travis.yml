@@ -1,22 +1,21 @@
-language: node_js
+language: rust
 
-node_js:
-  - lts/*
+rust:
+  - stable
+  - beta
+  - nightly
 
 sudo: required
 
-services:
-  - docker
+jobs:
+  allow_failures:
+    - rust: nightly
+  fast_finish: true
 
-addons:
-  apt:
-    sources:
-      - ubuntu-toolchain-r-test
-    packages:
-      - libstdc++-5-dev
+cache: cargo
 
-install:
-  - npm i -g @elementaryos/houston
+before_script:
+  - sudo apt-get install libgtk-3-dev
 
 script:
-  - houston ci
+  - cargo test --verbose --workspace
