@@ -15,7 +15,7 @@ jobs:
 cache: cargo
 
 before_script:
-  - sudo apt-get install libgtk-3-dev libgdk3.0-cli-dev
+  - sudo apt-get install libgtk-3-dev cairo libglib2.0-dev
 
 script:
   - cargo test --verbose --workspace
