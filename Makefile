@@ -16,7 +16,7 @@ UNINSTALL_FILES = $(PREFIX)/bin/xyz.gelez.mobydick \
 all: $(TARGET)
 
 $(TARGET):
-	$(CARGO) build --release --frozen
+	$(CARGO) build --release 
 
 .phony: check
 chuck:
