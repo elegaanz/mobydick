@@ -19,4 +19,4 @@ before_script:
   - sudo apt-get install libgtk-3-dev gtk+3.0 libcairo2-dev libglib2.0-dev
 
 script:
-  - cargo test --verbose --workspace
+  - cargo test --verbose --workspace --frozen
