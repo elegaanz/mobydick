@@ -119,7 +119,7 @@ impl workerpool::Worker for TrackDl {
 
     {
       let mut dls = DOWNLOADS.lock().unwrap();
-      let mut dl = dls.get_mut(&dl.track.id).unwrap();
+      let dl = dls.get_mut(&dl.track.id).unwrap();
       dl.status = DlStatus::Started;
     }
 

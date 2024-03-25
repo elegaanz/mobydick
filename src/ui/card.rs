@@ -68,7 +68,7 @@ where
         let track_id = dl.track.id;
         cancel_bt.connect_clicked(move |_| {
           let mut dls = crate::DOWNLOADS.lock().unwrap();
-          let mut dl = dls.get_mut(&track_id).unwrap();
+          let dl = dls.get_mut(&track_id).unwrap();
           dl.status = DlStatus::Cancelled;
           println!("Cancelled");
         });
